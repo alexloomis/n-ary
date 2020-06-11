@@ -23,9 +23,9 @@ iden : NAry Nil b -> b
 iden (Const b) = b
 
 export
-compose : NAry as b -> NAry (b :: bs) c -> NAry (as ++ bs) c
-compose (Const b) g = curry g b
-compose (Uncurry f) g = Uncurry $ flip (compose . f) g
+compose : NAry (b :: bs) c -> NAry as b -> NAry (as ++ bs) c
+compose g (Const b) = curry g b
+compose g (Uncurry f) = Uncurry $ flip (flip compose . f) g
 
 export
 interface ToNAry a b c where
