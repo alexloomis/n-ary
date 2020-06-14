@@ -4,17 +4,19 @@ import Data.Vect
 import Data.HVect
 
 %access public export
+%default total
 
 -- public export
 data NAry : Vect n Type -> Type -> Type where
   Const : b -> NAry Nil b
   Uncurry : (a -> NAry ts b) -> NAry (a :: ts) b
 
+-- Need better name
 -- public export
 iden : NAry Nil b -> b
 iden (Const b) = b
 
--- call apply instead?
+-- Need better name
 -- public export
 curry : NAry (t :: ts) b -> t -> NAry ts b
 curry (Uncurry f) = f
@@ -27,10 +29,7 @@ vectApply (Uncurry f) (x::xs) = vectApply (f x) xs
 -- export
 compose : NAry (b :: bs) c -> NAry as b -> NAry (as ++ bs) c
 compose g (Const b) = curry g b
-compose g (Uncurry f) = Uncurry $ flip (flip compose . f) g
-
--- binary : (a -> b -> c) -> NAry [a,b] c
--- binary = ?binary_rhs
+compose g (Uncurry f) = Uncurry $ compose g . f
 
 -- export
 interface ToNAry a b c where
@@ -61,9 +60,11 @@ toNAry f = Uncurry $ toN f
 interface FromNAry f b where
   fromNAry : f -> b
 
+-- Base case
 FromNAry (NAry Nil b) b where
   fromNAry (Const b) = b
 
+-- Inductive step
 FromNAry (NAry ts b) c => FromNAry (NAry (t :: ts) b) (t -> c) where
   fromNAry (Uncurry f) = fromNAry . f
 
@@ -79,17 +80,17 @@ binary = toNAry
 trinary : (a -> b -> c -> d) -> NAry [a,b,c] d
 trinary = toNAry
 
-{-
-test0 : NAry [] Integer
-test0 = toNAry 0
+-- These can all use fromNAry,
+-- but the type checker is much less finicky with these.
+unNullary : NAry Nil b -> b
+unNullary = iden
 
-test2 : Nat -> String -> Nat
-test2 = fromNAry $ toNAry (\n, s => Prelude.Strings.length s + n)
+unUnary : NAry [a] b -> (a -> b)
+unUnary = (iden .) . curry
 
-test3 : NAry [Bool, Nat, String] Nat
-test3 = toNAry f
-  where
-    f : Bool -> Nat -> String -> Nat
-    f b i s = if b then i else length s
-    -}
+unBinary : NAry [a,b] c -> (a -> b -> c)
+unBinary = (unUnary .) . curry
+
+unTrinary : NAry [a,b,c] d -> (a -> b -> c -> d)
+unTrinary = (unBinary .) . curry
 
