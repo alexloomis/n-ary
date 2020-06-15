@@ -1,4 +1,4 @@
-module Data.NAry.Hetero
+module Data.NAry
 
 import Data.Vect
 import Data.HVect
