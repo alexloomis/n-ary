@@ -29,6 +29,8 @@ partApply : NAry (ts ++ us) v -> HVect ts -> NAry us v
 partApply f Nil = f
 partApply (Uncurry f) (x :: xs) = partApply (f x) xs
 
+-- rw : a = b -> a -> b
+
 -- vectApply f = iden . partApply f
 -- gives a type mismatch between
 -- NAry ts b
@@ -53,9 +55,9 @@ ToNAry (a -> b) a (NAry Nil b) where
 ToNAry f a (NAry ts b) => ToNAry (c -> f) c (NAry (a::ts) b) where
   toN f a = Uncurry . toN $ f a
 
--- We can automatically eat extra arguments
-ToNAry b a (NAry Nil b) where
-  toN b a = Result b
+-- We could automatically eat extra arguments, but choose not to.
+-- ToNAry b a (NAry Nil b) where
+  -- toN b a = Result b
 
 namespace Nullary
   toNAry : b -> NAry Nil b
