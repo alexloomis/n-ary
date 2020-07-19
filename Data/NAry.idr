@@ -21,10 +21,19 @@ data NAry : (ts : Vect n Type) -> (t : Type) -> Type where
 iden : NAry Nil b -> b
 iden (Result b) = b
 
--- Need better name
+-- Need better name?
 curry : NAry (t :: ts) b -> t -> NAry ts b
 curry (Uncurry f) = f
 
+partApply : NAry (ts ++ us) v -> HVect ts -> NAry us v
+partApply f Nil = f
+partApply (Uncurry f) (x :: xs) = partApply (f x) xs
+
+-- vectApply f = iden . partApply f
+-- gives a type mismatch between
+-- NAry ts b
+-- and
+-- NAry (ts ++ []) b
 vectApply : NAry ts b -> HVect ts -> b
 vectApply (Result b) Nil = b
 vectApply (Uncurry f) (x::xs) = vectApply (f x) xs
@@ -44,7 +53,7 @@ ToNAry (a -> b) a (NAry Nil b) where
 ToNAry f a (NAry ts b) => ToNAry (c -> f) c (NAry (a::ts) b) where
   toN f a = Uncurry . toN $ f a
 
--- We can eat extra arguments
+-- We can automatically eat extra arguments
 ToNAry b a (NAry Nil b) where
   toN b a = Result b
 
@@ -67,6 +76,7 @@ FromNAry (NAry Nil b) b where
 FromNAry (NAry ts b) c => FromNAry (NAry (t :: ts) b) (t -> c) where
   fromNAry (Uncurry f) = fromNAry . f
 
+-- Error messages are nicer with the narrower type.
 nullary : b -> NAry Nil b
 nullary = toNAry
 
@@ -79,19 +89,18 @@ binary = toNAry
 trinary : (a -> b -> c -> d) -> NAry [a,b,c] d
 trinary = toNAry
 
--- These can all use fromNAry,
--- but the type checker is much less finicky with these.
+-- Error messages are nicer with the narrower type.
 unNullary : NAry Nil b -> b
-unNullary = iden
+unNullary = fromNAry
 
 unUnary : NAry [a] b -> (a -> b)
-unUnary = (iden .) . curry
+unUnary = fromNAry
 
 unBinary : NAry [a,b] c -> (a -> b -> c)
-unBinary = (unUnary .) . curry
+unBinary = fromNAry
 
 unTrinary : NAry [a,b,c] d -> (a -> b -> c -> d)
-unTrinary = (unBinary .) . curry
+unTrinary = fromNAry
 
 -----------
 -- Properties of functions.
@@ -142,6 +151,7 @@ isoUnary = isoTrans (fnIso isoIden) isoCurry
 private
 isoBinary : Iso (a -> b -> c) (NAry [a,b] c)
 isoBinary = isoTrans (fnIso isoUnary) isoCurry
+-- and so on...
 
 -----------
 -- Application to a vector
@@ -154,9 +164,6 @@ vectApply1 = Refl
 
 vectApply2 : vectApply (binary g) [a,b] = g a b
 vectApply2 = Refl
-
-vectApply3 : vectApply (trinary g) [a,b,c] = g a b c
-vectApply3 = Refl
 
 vectApply4 : {g : a' -> b' -> c' -> d' -> e'}
   -> vectApply (toNAry g) [a,b,c,d] = g a b c d
@@ -176,9 +183,12 @@ vectApply4 = Refl
 |||
 ||| `toNAry . fromNAry $ f : NAry Nil (a -> b)`
 |||
-||| However, if the types are the same, equality should hold.
-fromToNAry : {f : a -> b} -> fromNAry (toNAry f) = f
+||| However, if the types are the same, equality might still hold.
+fromToNAry : {f : a -> b -> c -> d} -> fromNAry (toNAry f) = f
 fromToNAry = Refl
+
+-- toFromNAry : {f : NAry [a] b} -> the (NAry [a] b) (unary (unUnary f)) = f
+-- toFromNAry {f = Uncurry g} = fnAp {f = Uncurry} ?p0
 
 -----------
 -- Composition
@@ -191,9 +201,10 @@ compose2 : {f : a -> b} -> {g : b -> c}
   -> vectApply (toNAry (g . f)) [x] = g (f x)
 compose2 = Refl
 
+-- toNAry (g . f) = compose (toNAry g) (toNAry f)
 private
 compose1' : {f : a -> b} -> {g : b -> c}
-  -> toNAry (g . f) = compose (toNAry g) (unary f)
+  -> toNAry (g . f) = compose (toNAry g) (the (NAry [a] b) (toNAry f))
 compose1' {f} = fnAp {f = Uncurry} Refl
 
 private
@@ -202,23 +213,24 @@ lem1 : {g : b -> NAry Nil c} -> {f : NAry Nil b}
 lem1 {f = Result x} = Refl
 
 private
-lem2 : {x : NAry Nil c} -> {y : NAry Nil c} -> x = y -> x = nullary (iden y)
+lem2 : {x : NAry Nil c} -> {y : NAry Nil c} -> x = y -> x = toNAry (iden y)
 lem2 {y} p = rewrite p in sym (toFrom isoIden y)
 
 private
 lem3 : {g : b -> NAry Nil c} -> {f : NAry Nil b}
-  -> compose (Uncurry g) f = nullary (iden (g (iden f)))
+  -> compose (Uncurry g) f = toNAry (iden (g (iden f)))
 lem3 {g} {f} = lem2 (lem1 {g} {f})
 -- lem3 {g} {f} = rewrite lem1 {g} {f} in sym (toFrom isoIden (g (iden f)))
 
 private
 lem4 : {f : NAry [a] b} -> {g : NAry [b] c}
-  -> compose g f = unary (unUnary g . unUnary f)
+  -> compose g f = toNAry (unUnary g . unUnary f)
 lem4 {f = Uncurry f} {g = Uncurry g}
   = fnAp {f = Uncurry} (fnExt (\y => lem3 {f = f y}))
 
+-- fromNAry (compose g f) = fromNAry g . fromNAry f
 private
 compose2' : {f : NAry [a] b} -> {g : NAry [b] c}
-  -> unUnary (compose g f) = unUnary g . unUnary f
+  -> fromNAry (compose g f) = the (b -> c) (fromNAry g) . fromNAry f
 compose2' {f} {g} = fnAp {f = unUnary} (lem4 {f} {g})
 
